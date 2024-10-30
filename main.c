@@ -5,8 +5,8 @@
 #include <string.h>
 #include <signal.h>
 #include <time.h>
-#include <SDL2/SDL.h>
 #include <stdarg.h>
+#include <stddef.h>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -63,10 +63,6 @@ __attribute__ ((unused)) static void debug_internal(const char *format, ...) {
 #define WINDOW_WIDTH  (SCREEN_WIDTH*GFX_SCALE)
 #define WINDOW_HEIGHT (SCREEN_HEIGHT*GFX_SCALE)
 #define WINDOW_TITLE "Powar - Pokéwalker emulator"
-
-static SDL_Window* gWindow = NULL;
-static SDL_Renderer* renderer;
-static SDL_Texture* sdlTexture;
 
 enum REGISTER_TYPE {
     REGTYPE_DBW8_ACCS2,
@@ -827,11 +823,11 @@ void fill_audio(void* userdata, uint8_t* stream, int len) {
 }
 
 static int sdl_init() {
-    SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
+    // SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
 #ifdef __EMSCRIPTEN__
     SDL_SetHint(SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT, "#canvas");
 #endif
-	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
+/*	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
 		fprintf(stderr, "SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
         return 0;
     }
@@ -848,14 +844,16 @@ static int sdl_init() {
     sdlTexture = SDL_CreateTexture(renderer,
         SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING,
-        SCREEN_WIDTH, SCREEN_HEIGHT);
+        SCREEN_WIDTH, SCREEN_HEIGHT);*/
     return 1;
 }
 
 static void sdl_quit() {
+/*
 	SDL_DestroyWindow(gWindow);
 	gWindow = NULL;
 	SDL_Quit();
+*/
 }
 
 static void sdl_draw(lcd_t *lcd) {
@@ -879,7 +877,7 @@ static void sdl_draw(lcd_t *lcd) {
     //         );
     //     }
     // }
-    int pitch = SCREEN_WIDTH * sizeof(uint32_t);
+   /* int pitch = SCREEN_WIDTH * sizeof(uint32_t);
     uint32_t *screen;
     SDL_LockTexture(sdlTexture, NULL, (void**) &screen, &pitch);
     for (int y = 0; y < SCREEN_HEIGHT; y++) {
@@ -909,7 +907,7 @@ static void sdl_draw(lcd_t *lcd) {
     // }
     SDL_UnlockTexture(sdlTexture);
     SDL_RenderCopy(renderer, sdlTexture, NULL, NULL);
-    SDL_RenderPresent(renderer);
+    SDL_RenderPresent(renderer);*/
 }
 
 char branch_mnemonics[16][4] = {
@@ -1178,17 +1176,32 @@ static void write32(pw_context_t *ctx, uint16_t addr, uint32_t val) {
     write16(ctx, addr+2, val & 0xFFFF);
 }
 
+static int reached = 0;
+static FILE *file;
+static int steps = 0;
+
 char ccr_names[8] = "CVZNUHUI";
 static void print_state(pw_context_t *ctx) {
-    debug("=== ");
-    for (int i = 0; i < 8; i++) {
-        debug("er%d:%.8x ", i, read_reg32(ctx, i));
-    }
-    debug("[");
-    for (int i = 0; i < 8; i++) {
-        debug(get_ccr_bit(ctx, i) ? "%c" : " ", ccr_names[i]);
-    }
-    debug("] STK:%.8x {B:%d W:%d I:%d}\n", peek32(ctx, read_reg32(ctx, ER_SP)-4), ctx->byte_access, ctx->word_access, ctx->internal_states);
+  if (ctx->ip >= 0x300 && !reached)
+    reached = 1;
+  if (!reached)
+    return;
+  file = fopen("dump.txt", "a");
+  steps++;
+  //printf("=== ", file);
+  fprintf(file, "%04X ", ctx->ip);
+  for (int i = 0; i < 8; i++) {
+      fprintf(file, "er%d:%.8x ", i, read_reg32(ctx, i));
+  }
+  fprintf(file, "[");
+  for (int i = 0; i < 8; i++) {
+      fprintf(file, get_ccr_bit(ctx, i) ? "%c" : " ", ccr_names[i]);
+  }
+  fprintf(file, "\n");
+  fclose(file);
+  if (steps > 10000)
+    exit(0);
+  //printf("] STK:%.8x {B:%d W:%d I:%d}\n", peek32(ctx, read_reg32(ctx, ER_SP)-4), ctx->byte_access, ctx->word_access, ctx->internal_states);
 }
 
 // INSNS
@@ -3124,6 +3137,7 @@ static void pw_step(pw_context_t *ctx) {
     //rtc_update(&ctx.rtc);
 }
 
+/*
 static enum keys sdl_scancode_to_key(SDL_Scancode code) {
     switch (code) {
         case SDL_SCANCODE_A:
@@ -3159,9 +3173,10 @@ static enum keys mouse_to_button() {
     }
 
 }
+*/
 
 static uint8_t sdl_poll(uint8_t keys_pressed, int *should_redraw) {
-    SDL_Event e;
+   /* SDL_Event e;
 
     while (SDL_PollEvent(&e) != 0) {
         switch(e.type) {
@@ -3187,7 +3202,8 @@ static uint8_t sdl_poll(uint8_t keys_pressed, int *should_redraw) {
                 break;
         }
     }
-    return keys_pressed;
+    return keys_pressed;*/
+return 0;
 }
 
 #define STATES_PER_SECOND 1600000
@@ -3229,10 +3245,10 @@ typedef struct render_context_t {
 #ifdef __EMSCRIPTEN__
 void loop(void *render_ctx) {
 #else
-void loop(uintptr_t render_ctx) {
+void loop(void *render_ctx) {
 #endif
 #ifndef __EMSCRIPTEN__
-    Uint32 start = SDL_GetPerformanceCounter();
+    //Uint32 start = 1;//SDL_GetPerformanceCounter();
 #endif // !__EMSCRIPTEN__
     render_context_t *context = (render_context_t*)render_ctx;
     while (context->ctx->states < STATES_PER_BATCH) {
@@ -3251,7 +3267,7 @@ void loop(uintptr_t render_ctx) {
         *(context->should_redraw) = 0;
     }
 
-#ifndef __EMSCRIPTEN__
+#if 0
     Uint32 end = SDL_GetPerformanceCounter();
     float seconds_elapsed = (end - start) / (float)SDL_GetPerformanceFrequency();
     int ms_to_sleep = EXEC_BATCH_MS - (int)(seconds_elapsed * 1000);
